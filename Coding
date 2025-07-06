@@ -1,0 +1,122 @@
+import 'package:flutter/material.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await Firebase.initializeApp();
+  runApp(SocialApp());
+}
+
+class SocialApp extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      home: AuthCheck(),
+    );
+  }
+}
+
+class AuthCheck extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    return StreamBuilder<User?>(
+      stream: FirebaseAuth.instance.authStateChanges(),
+      builder: (context, snapshot) {
+        if (snapshot.hasData) {
+          return HomePage();
+        } else {
+          return LoginPage();
+        }
+      },
+    );
+  }
+}
+
+// লগইন পেজ (সিম্পল UI)
+class LoginPage extends StatelessWidget {
+  final _emailController = TextEditingController();
+  final _passwordController = TextEditingController();
+
+  Future<void> _login() async {
+    try {
+      await FirebaseAuth.instance.signInWithEmailAndPassword(
+        email: _emailController.text,
+        password: _passwordController.text,
+      );
+    } catch (e) {
+      print("Error: $e");
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text("লগইন করুন")),
+      body: Padding(
+        padding: EdgeInsets.all(16.0),
+        child: Column(
+          children: [
+            TextField(controller: _emailController, decoration: InputDecoration(labelText: "ইমেইল")),
+            TextField(controller: _passwordController, obscureText: true, decoration: InputDecoration(labelText: "পাসওয়ার্ড")),
+            ElevatedButton(onPressed: _login, child: Text("লগইন")),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// হোম পেজ (পোস্ট লিস্ট)
+class HomePage extends StatelessWidget {
+  final _postController = TextEditingController();
+
+  Future<void> _addPost() async {
+    if (_postController.text.isEmpty) return;
+    await FirebaseFirestore.instance.collection('posts').add({
+      'text': _postController.text,
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+    _postController.clear();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: Text("হোম")),
+      body: Column(
+        children: [
+          // পোস্ট ইনপুট
+          Padding(
+            padding: EdgeInsets.all(8.0),
+            child: Row(
+              children: [
+                Expanded(
+                  child: TextField(controller: _postController, decoration: InputDecoration(hintText: "কি মনে হচ্ছে?")),
+                ),
+                IconButton(onPressed: _addPost, icon: Icon(Icons.send)),
+              ],
+            ),
+          ),
+          // পোস্ট লিস্ট
+          Expanded(
+            child: StreamBuilder<QuerySnapshot>(
+              stream: FirebaseFirestore.instance.collection('posts').orderBy('timestamp', descending: true).snapshots(),
+              builder: (context, snapshot) {
+                if (!snapshot.hasData) return CircularProgressIndicator();
+                return ListView.builder(
+                  itemCount: snapshot.data!.docs.length,
+                  itemBuilder: (context, index) {
+                    var post = snapshot.data!.docs[index];
+                    return ListTile(title: Text(post['text']));
+                  },
+                );
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
